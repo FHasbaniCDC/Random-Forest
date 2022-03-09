@@ -1,0 +1,102 @@
+---
+title: "bagging"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#load libraries
+```{r}
+library(dplyr)   
+library(ggplot2) 
+library(e1071)   #for calculating variable importance
+library(caret)   #for general model fitting
+library(rpart)   #for fitting decision trees
+library(ipred)   #for fitting bagged decision trees
+library(skimr)
+```
+
+#load data
+```{r}
+data("airquality")
+View(airquality)
+```
+
+```{r}
+str(airquality)
+skim(airquality)
+```
+
+#Typically, random forest methods/packages encourage two ways of handling missing values: a) drop data points with missing values (not recommended); b) fill in missing values with the median (for numerical values) or mode (for categorical values). While a) does not use all the available information by dropping data points, b) can sometimes brush too broad a stroke for data sets with many gaps and significant structure.str(airquality)
+
+#replace NAs with column medians
+```{r}
+for(i in 1:ncol(airquality)) {
+  airquality[ , i][is.na(airquality[ , i])] <- median(airquality[ , i], na.rm=TRUE)
+}
+```
+
+#missForest
+#https://bmcmedresmethodol.biomedcentral.com/articles/10.1186/s12874-020-01080-1
+```{r}
+skim(airquality)
+```
+
+#for reproducibility
+```{r}
+set.seed(1)
+
+#fit the bagged model
+bag <- bagging(
+  formula = Ozone ~ Solar.R+Wind+Temp+Month,
+  data = aq,
+  nbagg = 150, #bootstrapped samples 
+  coob = TRUE, #estimated out-of-bag error
+  control = rpart.control(minsplit = 2, cp = 0))
+
+#minsplit = 2: This tells the model to only require 2 observations in a node to split.
+#cp = 0. This is the complexity parameter. By setting it to 0, we don't require the model to be able to improve the overall fit by any amount in order to perform a split.
+
+#display fitted bagged model
+bag
+
+#out-of-bag estimated RMSE: the average difference between the predicted value for Ozone and the actual observed value.
+```
+
+#bagged models tend to provide more accurate predictions compared to individual decision trees, it's difficult to interpret and visualize the results of fitted bagged models.
+
+#calculate variable importance
+```{r}
+VI <- data.frame(var=names(airquality[,2:5]), imp=varImp(bag))
+```
+
+#sort variable importance descending
+```{r}
+VI$var
+VI$Overall
+VI_plot <- VI[order(VI$Overall, decreasing=TRUE),]
+
+#visualize variable importance with horizontal bar plot
+barplot(VI_plot$Overall,
+        names.arg=rownames(VI_plot),
+        horiz=TRUE,
+        col='steelblue',
+        xlab='Variable Importance')
+```
+
+#Use the Model to Make Predictions
+#define new observation for test data
+```{r}
+new <- data.frame(Solar.R=150, Wind=8, Temp=70, Month=5, Day=5)
+```
+
+#use fitted bagged model to predict Ozone value of new observation
+```{r}
+predict(bag, newdata=new)
+```
+#Based on the values of the predictor variables, the fitted bagged model predicts that the Ozone value will be 27.66 on this particular day.
+#From the data, on May 5th, Temp=56, Solar.R=205, Wind=14.3 and Ozone=30
+
+
